@@ -13,6 +13,7 @@ import projectsRouter from "./routes/projects.js";
 import tasksRouter from "./routes/tasks.js";
 import leadsRouter from "./routes/leads.js";
 import messagesRouter from "./routes/messages.js";
+import outreachRouter from "./routes/outreach.js";
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use("/api/projects", projectsRouter);
 app.use("/api/tasks", tasksRouter);
 app.use("/api/leads", leadsRouter);
 app.use("/api/messages", messagesRouter);
+app.use("/api/outreach", outreachRouter);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

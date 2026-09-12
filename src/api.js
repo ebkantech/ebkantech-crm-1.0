@@ -69,4 +69,12 @@ export const api = {
     list: (room) => get(`/messages/${room}`),
     post: (room, msg) => post(`/messages/${room}`, msg),
   },
+  outreach: {
+    list: () => get("/outreach"),
+    sentToday: () => get("/outreach/sent-today"),
+    markSent: (id) => post(`/outreach/${id}/sent`),
+    stop: (id) => post(`/outreach/${id}/stop`),
+    reply: (id) => post(`/outreach/${id}/reply`),
+    enrich: (id, contact) => post(`/outreach/${id}/enrich`, { contact }),
+  },
 };

@@ -11,7 +11,7 @@ export const TENANTS = [
 export const SEED_PASSWORD = "DayBook@2026";
 
 export const STAFF = [
-  { _id: "u1", name: "Priya Rao", email: "priya.rao@raokulkarni.com", role: "partner" },
+  { _id: "u1", name: "Priya Rao", email: "priya.rao@raokulkarni.com", role: "admin" },
   { _id: "u2", name: "Meera S.", email: "meera.s@raokulkarni.com", role: "sales" },
   { _id: "u3", name: "Anil K.", email: "anil.k@raokulkarni.com", role: "associate" },
   { _id: "u4", name: "Tejas Iyer", email: "tejas.iyer@raokulkarni.com", role: "developer" },
@@ -247,4 +247,19 @@ export const MESSAGES = [
   { room: "product", by: "u4", at: "2026-08-25 16:44", body: "It compares the last ten digits now, so 0 and +91 both land on the same lead." },
   { room: "partners", by: "u1", at: "2026-08-26 08:00", body: "Northline is the one to watch this quarter. Everything else is retainer work." },
   { room: "partners", by: "u5", at: "2026-08-26 10:30", body: "Noted. I'll want the fee ledger for the audit file by mid-September." },
+];
+
+export const OUTREACH = [
+  { _id: "o1", company: "Alkhorayef Power Solutions", domain: "alkhorayef.com", email: "sales.aps@alkhorayef.com", contact: "Yousef Al-Harbi", mobile: "+966 55 210 8841", region: "sa", segment: "power", step: 0, started: "2026-08-30", state: "active" },
+  { _id: "o2", company: "Saudi Power Sources", domain: "powersourcesa.com", email: "info@powersourcesa.com", contact: null, mobile: "+966 50 776 2213", region: "sa", segment: "power", step: 1, started: "2026-08-26", state: "active" },
+  { _id: "o3", company: "Najm Integrated Systems", domain: "najm-is.com.sa", email: "info@najm-is.com.sa", contact: null, mobile: null, region: "sa", segment: "si", step: 0, started: "2026-08-30", state: "active" },
+  { _id: "o4", company: "Rawaj Technology", domain: "rawajtech.sa", email: "sales@rawajtech.sa", contact: "Mohammed Siddiqui", mobile: "+966 53 401 9920", region: "sa", segment: "si", step: 2, started: "2026-08-23", state: "active" },
+  { _id: "o5", company: "Tawasul Networks", domain: "tawasul-net.sa", email: "contact@tawasul-net.sa", contact: null, mobile: "+966 56 118 3305", region: "sa", segment: "telecom", step: 1, started: "2026-08-25", state: "active" },
+  { _id: "o6", company: "Dhabi Secure", domain: "dhabisecure.ae", email: "info@dhabisecure.ae", contact: null, mobile: "+971 50 229 4417", region: "ae", segment: "cyber", step: 0, started: "2026-08-30", state: "active" },
+  { _id: "o7", company: "Manaret ERP Solutions", domain: "manaret-erp.com", email: "info@manaret-erp.com", contact: null, mobile: null, region: "sa", segment: "erp", step: 3, started: "2026-08-20", state: "active" },
+  { _id: "o8", company: "Hisn Cyber Defense", domain: "hisncyber.sa", email: "info@hisncyber.sa", contact: null, mobile: null, region: "sa", segment: "cyber", step: 0, started: "2026-08-30", state: "active" },
+  { _id: "o9", company: "Sahab IT Distribution", domain: "sahab-it.com", email: "info@sahab-it.com", contact: null, mobile: null, region: "sa", segment: "si", step: 5, started: "2026-08-14", state: "active" },
+  { _id: "o10", company: "Green Power Arabia", domain: "green-power.co", email: "info@green-power.co", contact: "Faisal Otaibi", mobile: "+966 54 903 7761", region: "sa", segment: "power", step: 0, started: "2026-08-30", state: "active" },
+  { _id: "o11", company: "Global Reseller Placeholder", domain: "example.com", email: "info@example.com", contact: null, mobile: null, region: "sa", segment: "si", step: 0, started: "2026-08-30", state: "active", parked: true },
+  { _id: "o12", company: "Wasl Systems Integration", domain: "waslsi.com.sa", email: "info@waslsi.com.sa", contact: null, mobile: null, region: "sa", segment: "si", step: 1, started: "2026-08-27", state: "active" },
 ];

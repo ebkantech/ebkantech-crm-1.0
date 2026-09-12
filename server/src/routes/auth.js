@@ -105,12 +105,12 @@ router.get("/bootstrap-status", async (_req, res) => {
 });
 
 /* Self-service signup exists for exactly one moment: a brand-new install
- * with zero accounts. It always creates a partner (there's no one else yet
+ * with zero accounts. It always creates an admin (there's no one else yet
  * to hand out roles) and closes itself the instant one account exists —
- * every account after that comes from an existing partner's invite. */
+ * every account after that comes from an existing admin's invite. */
 router.post("/signup", loginLimiter, async (req, res) => {
   const count = await Staff.countDocuments();
-  if (count > 0) return res.status(403).json({ error: "Signup is closed. Ask a partner at your firm for an invite." });
+  if (count > 0) return res.status(403).json({ error: "Signup is closed. Ask an admin at your firm for an invite." });
 
   const name = String(req.body.name || "").trim();
   const email = normEmail(req.body.email);
@@ -127,11 +127,11 @@ router.post("/signup", loginLimiter, async (req, res) => {
       _id: "u" + Date.now().toString().slice(-8) + Math.floor(Math.random() * 100),
       name,
       email,
-      role: "partner",
+      role: "admin",
       passwordHash: await hashPassword(password),
     });
   } catch (err) {
-    if (err.code === 11000) return res.status(409).json({ error: "Signup is closed. Ask a partner at your firm for an invite." });
+    if (err.code === 11000) return res.status(409).json({ error: "Signup is closed. Ask an admin at your firm for an invite." });
     throw err;
   }
 

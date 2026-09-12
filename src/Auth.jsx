@@ -78,7 +78,7 @@ function AuthShell({ eyebrow, title, subtitle, children, footer }) {
           </h1>
           <p className="mt-4 max-w-sm text-sm leading-relaxed" style={{ fontFamily: F.body, color: "#B9B7D6" }}>
             Every account only sees what its role is meant to see — sales sees the pipeline, developers see their
-            projects, and only a partner sees it all.
+            projects, and only an admin sees it all.
           </p>
         </div>
 
@@ -212,7 +212,7 @@ export function LoginPage({ navigate }) {
     <AuthShell
       eyebrow="Sign in"
       title="Welcome back"
-      subtitle="Sign in with the account your partner set up for you."
+      subtitle="Sign in with the account your admin set up for you."
       footer={
         <div className="space-y-3">
           <p className="text-sm" style={{ fontFamily: F.body, color: C.inkSoft }}>
@@ -318,7 +318,7 @@ export function SignupPage({ navigate }) {
       <AuthShell
         eyebrow="Sign up"
         title="Signup is closed"
-        subtitle="This firm already has accounts set up. Ask a partner there for an invite instead."
+        subtitle="This firm already has accounts set up. Ask an admin there for an invite instead."
       >
         <button
           type="button"
@@ -354,7 +354,7 @@ export function SignupPage({ navigate }) {
     <AuthShell
       eyebrow="First-time setup"
       title="Create the first admin account"
-      subtitle="This firm has no accounts yet. The account you create here becomes a partner, with full access — every other account is invited from inside the app afterwards."
+      subtitle="This firm has no accounts yet. The account you create here becomes an admin, with full access — every other account is invited from inside the app afterwards."
       footer={
         <button type="button" onClick={() => navigate("/login")} className="flex items-center gap-1.5 text-sm" style={{ fontFamily: F.body, color: C.inkSoft }}>
           <ArrowLeft size={14} /> Back to sign in

@@ -1,6 +1,9 @@
-import { useState, useMemo, useEffect, createContext, useContext } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { api } from "./api";
 import { C, F, FONTS } from "./theme";
+import { TODAY, daysAgo, daysLeft, digits, norm, money, tierOf, nextStep, dueOn } from "./constants";
+import { PERMS, ROLES, Session, useMe, can } from "./roles";
+import OutreachView from "./outreach";
 import {
   Search,
   Plus,
@@ -21,13 +24,13 @@ import {
   Hash,
   Lock,
   MessagesSquare,
-  ShieldCheck,
   LayoutDashboard,
   ListChecks,
   CornerDownRight,
   Undo2,
   LogOut,
   UserCog,
+  Send,
 } from "lucide-react";
 
 // Populated from the API when the app boots — see the bootstrap effect in SalesCRM.
@@ -51,67 +54,6 @@ const CHANNELS = {
 
 const SOURCES = ["WhatsApp", "Website form", "Referral", "Import", "Event", "Cold call"];
 
-const money = (n) =>
-  "₹" + new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(Math.round(n));
-
-const TODAY = new Date("2026-08-30");
-const daysAgo = (d) => Math.max(0, Math.round((TODAY - new Date(d)) / 86400000));
-
-const digits = (s) => (s || "").replace(/\D/g, "").slice(-10);
-const norm = (s) => (s || "").trim().toLowerCase();
-
-/* ------------------------------------------------------------------ *
- *  Who may do what. Permission is a vocabulary the roles draw from,
- *  not a switch buried in code — so a partner can read this table and
- *  understand exactly what a developer can see.
- * ------------------------------------------------------------------ */
-const PERMS = {
-  "leads.view": "See leads",
-  "leads.edit": "Move leads and edit them",
-  "client.message": "Write to clients",
-  "fees.view": "See fee figures",
-  "projects.view.own": "See projects they are on",
-  "projects.view.all": "See every project",
-  "team.view": "See who is staffed where",
-  "team.manage": "Add staff accounts and set their role",
-  "tasks.assign": "Open work and hand it to a lead",
-  "import": "Bring in lists",
-  "rules": "Change sources and rules",
-};
-
-const ROLES = {
-  partner: {
-    label: "Partner",
-    perms: ["leads.view", "leads.edit", "client.message", "fees.view", "projects.view.own", "projects.view.all", "team.view", "team.manage", "tasks.assign", "import", "rules"],
-    rooms: ["sales", "dev", "partners", "product"],
-  },
-  sales: {
-    label: "Sales lead",
-    perms: ["leads.view", "leads.edit", "client.message", "fees.view", "projects.view.own", "import"],
-    rooms: ["sales", "product"],
-  },
-  associate: {
-    label: "Associate",
-    perms: ["leads.view", "leads.edit", "client.message", "projects.view.own"],
-    rooms: ["sales", "product"],
-  },
-  developer: {
-    label: "Developer",
-    perms: ["leads.view", "projects.view.own"],
-    rooms: ["dev", "product"],
-  },
-  designer: {
-    label: "Designer",
-    perms: ["projects.view.own"],
-    rooms: ["dev", "product"],
-  },
-  auditor: {
-    label: "Auditor, read only",
-    perms: ["leads.view", "fees.view", "projects.view.all"],
-    rooms: ["partners"],
-  },
-};
-
 // Populated from the API when the app boots — see the bootstrap effect in SalesCRM.
 let STAFF = [];
 
@@ -119,7 +61,6 @@ let STAFF = [];
 let PROJECTS = [];
 
 const progressOf = (p) => p.milestones.filter(([, d]) => d).length / p.milestones.length;
-const daysLeft = (d) => Math.round((new Date(d) - TODAY) / 86400000);
 const health = (p) => {
   const left = daysLeft(p.due);
   const done = progressOf(p);
@@ -161,15 +102,12 @@ const rollup = (tasks, t) => {
 const isLeadOn = (me, projectId) => leadOf(project(projectId)) === me.id;
 
 const ROOMS = [
-  { id: "sales", name: "sales-team", about: "Pipeline, quotes, who's chasing what", roles: ["partner", "sales", "associate"] },
-  { id: "dev", name: "developer-team", about: "The CRM itself: bugs, deploys, integrations", roles: ["partner", "developer"] },
-  { id: "product", name: "product", about: "Where sales tells engineering what hurts", roles: ["partner", "sales", "associate", "developer"] },
-  { id: "partners", name: "partners", about: "Fees, staffing, anything not for the floor", roles: ["partner", "auditor"] },
+  { id: "sales", name: "sales-team", about: "Pipeline, quotes, who's chasing what", roles: ["superadmin", "admin", "sales", "associate"] },
+  { id: "dev", name: "developer-team", about: "The CRM itself: bugs, deploys, integrations", roles: ["superadmin", "admin", "developer"] },
+  { id: "product", name: "product", about: "Where sales tells engineering what hurts", roles: ["superadmin", "admin", "sales", "associate", "developer"] },
+  { id: "partners", name: "partners", about: "Fees, staffing, anything not for the floor", roles: ["superadmin", "admin", "auditor"] },
 ];
 
-const Session = createContext({ id: "u1", name: "Priya Rao", role: "partner" });
-const useMe = () => useContext(Session);
-const can = (me, p) => ROLES[me.role].perms.includes(p);
 const staffName = (id) => STAFF.find((s) => s.id === id)?.name || "Someone";
 
 /* fee figures are hidden, not blanked, so it's obvious they exist */
@@ -1216,7 +1154,7 @@ function TeamView({ messages, onPost, room, setRoom, leads, onOpen }) {
           <div className="flex flex-1 flex-col items-center justify-center gap-3 px-10 text-center">
             <Lock size={18} style={{ color: C.carbon }} />
             <p className="max-w-sm text-sm" style={{ fontFamily: F.body, color: C.inkSoft }}>
-              {open.name} is for {open.roles.map((r) => ROLES[r].label).join(" and ")}. Ask a partner if you need to be in it.
+              {open.name} is for {open.roles.map((r) => ROLES[r].label).join(" and ")}. Ask an admin if you need to be in it.
             </p>
           </div>
         )}
@@ -1943,11 +1881,14 @@ function StaffAdmin({ staff, onCreate, onUpdate }) {
       <div className="mt-7" style={{ borderTop: `1px solid ${C.rule}` }}>
         {staff.map((s) => (
           <div key={s.id} className="flex flex-wrap items-center justify-between gap-3 py-3" style={{ borderBottom: `1px solid ${C.rule}` }}>
-            <div className="min-w-0">
-              <p className="truncate text-sm" style={{ fontFamily: F.body, fontWeight: 600, color: s.active === false ? C.inkSoft : C.ink }}>
-                {s.name} {s.id === me.id && <span style={{ color: C.inkSoft, fontWeight: 400 }}>(you)</span>}
-              </p>
-              <p className="truncate text-xs" style={{ fontFamily: F.mono, color: C.inkSoft }}>{s.email || "—"}</p>
+            <div className="flex min-w-0 items-center gap-3">
+              <Avatar name={s.name} size={32} />
+              <div className="min-w-0">
+                <p className="truncate text-sm" style={{ fontFamily: F.body, fontWeight: 600, color: s.active === false ? C.inkSoft : C.ink }}>
+                  {s.name} {s.id === me.id && <span style={{ color: C.inkSoft, fontWeight: 400 }}>(you)</span>}
+                </p>
+                <p className="truncate text-xs" style={{ fontFamily: F.mono, color: C.inkSoft }}>{s.email || "—"}</p>
+              </div>
             </div>
             <div className="flex shrink-0 items-center gap-3">
               {roleFor(s.id)}
@@ -1971,6 +1912,87 @@ function StaffAdmin({ staff, onCreate, onUpdate }) {
   );
 }
 
+/* ---- a face, or the fallback everyone starts with ---- */
+/* ---- a face, or the initial everyone starts with ---- */
+function Avatar({ name, size = 28 }) {
+  const initial = (name || "?").trim().charAt(0).toUpperCase();
+  return (
+    <span
+      className="flex shrink-0 items-center justify-center rounded-full"
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: C.stamp,
+        color: C.slip,
+        fontFamily: F.display,
+        fontWeight: 600,
+        fontSize: Math.round(size * 0.45),
+      }}
+    >
+      {initial}
+    </span>
+  );
+}
+
+/* ---- who's signed in, with a way out — shared by the desktop rail and
+ * the mobile bar so logging out isn't a desktop-only feature ---- */
+function ProfileMenu({ me, open, onToggle, onManageTeam, onLogout, dropUp, compact }) {
+  return (
+    <div className="relative">
+      {open && (
+        <div
+          className="absolute z-20 w-56 py-1"
+          style={{
+            backgroundColor: C.slip,
+            border: `1px solid ${C.rule}`,
+            ...(dropUp
+              ? { bottom: "100%", left: 0, right: 0, marginBottom: "0.5rem" }
+              : { top: "100%", right: 0, marginTop: "0.5rem" }),
+          }}
+        >
+          <div className="flex items-center gap-2.5 px-3 py-2.5" style={{ borderBottom: `1px solid ${C.rule}` }}>
+            <Avatar name={me.name} size={34} />
+            <div className="min-w-0">
+              <p className="truncate text-sm" style={{ fontFamily: F.body, fontWeight: 600, color: C.ink }}>{me.name}</p>
+              <p className="text-xs" style={{ fontFamily: F.mono, color: C.inkSoft }}>{ROLES[me.role].label}</p>
+            </div>
+          </div>
+
+          {can(me, "team.manage") && (
+            <button
+              onClick={onManageTeam}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
+              style={{ fontFamily: F.body, color: C.ink }}
+            >
+              <UserCog size={14} /> Manage team
+            </button>
+          )}
+          <button
+            onClick={onLogout}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
+            style={{ fontFamily: F.body, color: C.carbon }}
+          >
+            <LogOut size={14} /> Log out
+          </button>
+        </div>
+      )}
+      {compact ? (
+        <button onClick={onToggle} aria-label="Account menu" className="flex shrink-0 items-center justify-center">
+          <Avatar name={me.name} size={26} />
+        </button>
+      ) : (
+        <button onClick={onToggle} className="flex w-full items-center gap-2 text-left">
+          <Avatar name={me.name} size={26} />
+          <span className="min-w-0">
+            <span className="block truncate text-sm" style={{ fontFamily: F.body, fontWeight: 600, color: C.paper }}>{me.name}</span>
+            <span className="block text-xs" style={{ fontFamily: F.mono, color: C.inkSoft }}>{ROLES[me.role].label}</span>
+          </span>
+        </button>
+      )}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 
 export default function SalesCRM({ me, onLogout }) {
@@ -1987,6 +2009,9 @@ export default function SalesCRM({ me, onLogout }) {
   const [whoOpen, setWhoOpen] = useState(false);
   const [messages, setMessages] = useState({});
   const [tasks, setTasks] = useState([]);
+  const [outreach, setOutreach] = useState([]);
+  const [sentToday, setSentToday] = useState(0);
+  const [outreachError, setOutreachError] = useState("");
   const [room, setRoom] = useState(ROLES[me.role].rooms[0]);
 
   /* boot: pull everything the app used to keep in memory from the API instead.
@@ -1998,12 +2023,15 @@ export default function SalesCRM({ me, onLogout }) {
     const myRooms = ROLES[me.role].rooms;
     (async () => {
       try {
-        const [tenants, staff, projects, leadsData, tasksData, ...roomMessages] = await Promise.all([
+        const seesOutreach = can(me, "outreach");
+        const [tenants, staff, projects, leadsData, tasksData, outreachData, sentTodayData, ...roomMessages] = await Promise.all([
           api.tenants.list(),
           api.staff.list(),
           api.projects.list(),
           can(me, "leads.view") ? api.leads.list() : Promise.resolve([]),
           api.tasks.list(),
+          seesOutreach ? api.outreach.list() : Promise.resolve([]),
+          seesOutreach ? api.outreach.sentToday() : Promise.resolve({ count: 0 }),
           ...ROOMS.map((r) => (myRooms.includes(r.id) ? api.messages.list(r.id) : Promise.resolve([]))),
         ]);
         if (cancelled) return;
@@ -2014,6 +2042,8 @@ export default function SalesCRM({ me, onLogout }) {
         ROOMS.forEach((r, i) => { messagesMap[r.id] = roomMessages[i]; });
         setLeads(leadsData);
         setTasks(tasksData);
+        setOutreach(outreachData);
+        setSentToday(sentTodayData.count);
         setMessages(messagesMap);
         setTenant(tenants[0]);
         setReady(true);
@@ -2063,6 +2093,44 @@ export default function SalesCRM({ me, onLogout }) {
   const updateStaff = async (id, patch) => {
     await api.staff.update(id, patch);
     await refreshStaff();
+  };
+  const markOutreachSent = (id) => {
+    setOutreachError("");
+    api.outreach.markSent(id)
+      .then((updated) => {
+        setOutreach((os) => os.map((o) => (o.id === id ? updated : o)));
+        return api.outreach.sentToday();
+      })
+      .then((s) => setSentToday(s.count))
+      .catch((err) => setOutreachError(err.message));
+  };
+
+  const stopOutreach = (id) => {
+    setOutreachError("");
+    api.outreach.stop(id)
+      .then((updated) => setOutreach((os) => os.map((o) => (o.id === id ? updated : o))))
+      .catch((err) => setOutreachError(err.message));
+  };
+
+  /* a reply ends the sequence and becomes a real lead in the pipeline */
+  const replyOutreach = (id) => {
+    setOutreachError("");
+    api.outreach.reply(id)
+      .then(({ outreach: updated, lead: newLead }) => {
+        setOutreach((os) => os.map((o) => (o.id === id ? updated : o)));
+        setLeads((ls) => [newLead, ...ls]);
+        setSelected(newLead.id);
+        setView("pipeline");
+      })
+      .catch((err) => setOutreachError(err.message));
+  };
+
+  /* a name is the whole game: this recomputes the tier on the spot */
+  const enrichOutreach = (id, contact) => {
+    setOutreachError("");
+    api.outreach.enrich(id, contact)
+      .then((updated) => setOutreach((os) => os.map((o) => (o.id === id ? updated : o))))
+      .catch((err) => setOutreachError(err.message));
   };
 
   const post = (id, msg) => {
@@ -2149,6 +2217,16 @@ export default function SalesCRM({ me, onLogout }) {
   const NAV = [
     { icon: LayoutDashboard, label: "Dashboard", id: "home", badge: null, need: null },
     { icon: ListChecks, label: "Tasks", id: "tasks", badge: tasks.filter((t) => t.to === me.id && t.status !== "done" && !kidsOf(tasks, t.id).length).length || null, need: null },
+    {
+      icon: Send,
+      label: "Outreach",
+      id: "outreach",
+      badge: outreach.filter((o) => {
+        const st = nextStep(o);
+        return o.state === "active" && st && dueOn(o, st) <= TODAY && ![0, 4].includes(tierOf(o));
+      }).length || null,
+      need: "outreach",
+    },
     { icon: Radio, label: "Pipeline", id: "pipeline", badge: null, need: "leads.view" },
     { icon: Inbox, label: "Inbox", id: "inbox", badge: waiting || null, need: "leads.view" },
     { icon: MessagesSquare, label: "Team", id: "team", badge: ROLES[me.role].rooms.length, need: null },
@@ -2165,17 +2243,27 @@ export default function SalesCRM({ me, onLogout }) {
 
       {/* mobile: the rail, laid on its side */}
       <div className="shrink-0 md:hidden" style={{ backgroundColor: C.ink }}>
-        <div className="flex items-baseline justify-between px-4 pt-3">
-          <span className="text-sm" style={{ fontFamily: F.display, fontWeight: 600, color: C.paper }}>
+        <div className="flex items-center justify-between gap-3 px-4 pt-3">
+          <span className="min-w-0 truncate text-sm" style={{ fontFamily: F.display, fontWeight: 600, color: C.paper }}>
             {tenant.name}
           </span>
-          <button
-            onClick={() => setTenant(TENANTS[(TENANTS.findIndex((t) => t.id === tenant.id) + 1) % TENANTS.length])}
-            className="text-xs uppercase"
-            style={{ fontFamily: F.body, fontWeight: 600, letterSpacing: "0.1em", color: C.carbon }}
-          >
-            Switch
-          </button>
+          <div className="flex shrink-0 items-center gap-3">
+            <button
+              onClick={() => setTenant(TENANTS[(TENANTS.findIndex((t) => t.id === tenant.id) + 1) % TENANTS.length])}
+              className="text-xs uppercase"
+              style={{ fontFamily: F.body, fontWeight: 600, letterSpacing: "0.1em", color: C.carbon }}
+            >
+              Switch
+            </button>
+            <ProfileMenu
+              me={me}
+              open={whoOpen}
+              onToggle={() => setWhoOpen((v) => !v)}
+              onManageTeam={() => { setWhoOpen(false); setView("staff"); }}
+              onLogout={onLogout}
+              compact
+            />
+          </div>
         </div>
         <div className="flex gap-4 overflow-x-auto px-4 pb-2 pt-2">
           {NAV.map(({ icon: Icon, label, id, badge }) => {
@@ -2203,100 +2291,81 @@ export default function SalesCRM({ me, onLogout }) {
         </div>
       </div>
 
-      <aside className="hidden w-56 shrink-0 flex-col justify-between py-6 md:flex" style={{ backgroundColor: C.ink }}>
-        <div>
-          <div className="px-5">
-            <p className="text-xs uppercase" style={{ fontFamily: F.body, fontWeight: 600, letterSpacing: "0.18em", color: C.carbon }}>
-              Day book
-            </p>
-            <div className="relative mt-3">
-              <button onClick={() => setSwitcher((v) => !v)} className="flex w-full items-start gap-1.5 text-left">
-                <span className="text-base leading-snug" style={{ fontFamily: F.display, fontWeight: 600, color: C.paper }}>
-                  {tenant.name}
-                </span>
-                <ChevronDown size={14} className="mt-1.5 shrink-0" style={{ color: C.inkSoft }} />
-              </button>
-              {switcher && (
-                <div className="absolute left-0 right-0 z-10 mt-2 py-1" style={{ backgroundColor: C.slip, border: `1px solid ${C.rule}` }}>
-                  {TENANTS.map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => { setTenant(t); setSwitcher(false); }}
-                      className="block w-full px-3 py-2 text-left text-sm"
-                      style={{ fontFamily: F.body, color: t.id === tenant.id ? C.stamp : C.ink }}
-                    >
-                      {t.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <p className="mt-1 text-xs" style={{ fontFamily: F.mono, color: C.inkSoft }}>{tenant.gstin}</p>
-            </div>
+      <aside className="hidden w-56 shrink-0 flex-col md:flex" style={{ backgroundColor: C.ink }}>
+        <div className="shrink-0 px-5 pt-6">
+          <p className="text-xs uppercase" style={{ fontFamily: F.body, fontWeight: 600, letterSpacing: "0.18em", color: C.carbon }}>
+            Day book
+          </p>
+          <div className="relative mt-3">
+            <button onClick={() => setSwitcher((v) => !v)} className="flex w-full items-start gap-1.5 text-left">
+              <span className="text-base leading-snug" style={{ fontFamily: F.display, fontWeight: 600, color: C.paper }}>
+                {tenant.name}
+              </span>
+              <ChevronDown size={14} className="mt-1.5 shrink-0" style={{ color: C.inkSoft }} />
+            </button>
+            {switcher && (
+              <div className="absolute left-0 right-0 z-10 mt-2 py-1" style={{ backgroundColor: C.slip, border: `1px solid ${C.rule}` }}>
+                {TENANTS.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => { setTenant(t); setSwitcher(false); }}
+                    className="block w-full px-3 py-2 text-left text-sm"
+                    style={{ fontFamily: F.body, color: t.id === tenant.id ? C.stamp : C.ink }}
+                  >
+                    {t.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="mt-1 text-xs" style={{ fontFamily: F.mono, color: C.inkSoft }}>{tenant.gstin}</p>
           </div>
-
-          <nav className="mt-8">
-            {NAV.map(({ icon: Icon, label, id, badge }) => {
-              const active = view === id;
-              return (
-                <button
-                  key={label}
-                  onClick={() => setView(id)}
-                  className="flex w-full items-center gap-2.5 px-5 py-2.5 text-sm"
-                  style={{
-                    fontFamily: F.body,
-                    color: active ? C.paper : C.inkSoft,
-                    fontWeight: active ? 600 : 400,
-                    borderLeft: `2px solid ${active ? C.carbon : "transparent"}`,
-                  }}
-                >
-                  <Icon size={15} />
-                  <span className="flex-1 text-left">{label}</span>
-                  {badge != null && (
-                    <span
-                      className="px-1.5 text-xs"
-                      style={{
-                        fontFamily: F.mono,
-                        color: label === "Inbox" ? C.slip : C.inkSoft,
-                        backgroundColor: label === "Inbox" ? C.carbon : "transparent",
-                      }}
-                    >
-                      {badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
         </div>
 
-        <div className="relative px-5">
-          {whoOpen && (
-            <div className="absolute bottom-full left-5 right-5 mb-2 py-1" style={{ backgroundColor: C.slip, border: `1px solid ${C.rule}` }}>
-              {can(me, "team.manage") && (
-                <button
-                  onClick={() => { setWhoOpen(false); setView("staff"); }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
-                  style={{ fontFamily: F.body, color: C.ink }}
-                >
-                  <UserCog size={14} /> Manage team
-                </button>
-              )}
+        {/* the nav list is the one part that grows with the account — everything
+         * around it stays put and this scrolls on its own when it runs long */}
+        <nav className="mt-8 min-h-0 flex-1 overflow-y-auto">
+          {NAV.map(({ icon: Icon, label, id, badge }) => {
+            const active = view === id;
+            return (
               <button
-                onClick={onLogout}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
-                style={{ fontFamily: F.body, color: C.carbon }}
+                key={label}
+                onClick={() => setView(id)}
+                className="flex w-full items-center gap-2.5 px-5 py-2.5 text-sm"
+                style={{
+                  fontFamily: F.body,
+                  color: active ? C.paper : C.inkSoft,
+                  fontWeight: active ? 600 : 400,
+                  borderLeft: `2px solid ${active ? C.carbon : "transparent"}`,
+                }}
               >
-                <LogOut size={14} /> Log out
+                <Icon size={15} />
+                <span className="flex-1 text-left">{label}</span>
+                {badge != null && (
+                  <span
+                    className="px-1.5 text-xs"
+                    style={{
+                      fontFamily: F.mono,
+                      color: label === "Inbox" ? C.slip : C.inkSoft,
+                      backgroundColor: label === "Inbox" ? C.carbon : "transparent",
+                    }}
+                  >
+                    {badge}
+                  </span>
+                )}
               </button>
-            </div>
-          )}
-          <button onClick={() => setWhoOpen((v) => !v)} className="flex w-full items-start gap-2 text-left">
-            <ShieldCheck size={14} className="mt-0.5 shrink-0" style={{ color: C.carbon }} />
-            <span className="min-w-0">
-              <span className="block truncate text-sm" style={{ fontFamily: F.body, fontWeight: 600, color: C.paper }}>{me.name}</span>
-              <span className="block text-xs" style={{ fontFamily: F.mono, color: C.inkSoft }}>{ROLES[me.role].label}</span>
-            </span>
-          </button>
+            );
+          })}
+        </nav>
+
+        <div className="shrink-0 px-5 py-4" style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+          <ProfileMenu
+            me={me}
+            open={whoOpen}
+            onToggle={() => setWhoOpen((v) => !v)}
+            onManageTeam={() => { setWhoOpen(false); setView("staff"); }}
+            onLogout={onLogout}
+            dropUp
+          />
         </div>
       </aside>
 
@@ -2305,6 +2374,17 @@ export default function SalesCRM({ me, onLogout }) {
           {view === "home" && <Dashboard leads={leads} onGo={setView} onOpenLead={openLead} />}
           {view === "tasks" && (
             <TasksView tasks={tasks} onStatus={setTaskStatus} onHandBack={handBack} onBreak={breakOut} onOpen={openTask} />
+          )}
+          {view === "outreach" && (
+            <OutreachView
+              list={outreach}
+              onSent={markOutreachSent}
+              onStop={stopOutreach}
+              onReply={replyOutreach}
+              onEnrich={enrichOutreach}
+              sentToday={sentToday}
+              error={outreachError}
+            />
           )}
           {view === "import" && <Import leads={leads} onCommit={commitImport} />}
           {view === "inbox" && <InboxView leads={leads} onOpen={openLead} />}
