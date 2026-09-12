@@ -1,6 +1,7 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
-import Staff from "../models/Staff.js";
+import Admin from "../models/Admin.js";
+import { findAccountByEmail, countAllAccounts } from "../accounts.js";
 import { hashPassword, verifyPassword, passwordPolicyError } from "../utils/password.js";
 import { issueSession, generateResetToken, hashResetToken, SESSION_COOKIE_MAX_AGE_MS } from "../utils/tokens.js";
 import { sendPasswordResetEmail } from "../mail.js";
@@ -60,7 +61,7 @@ router.post("/login", loginLimiter, async (req, res) => {
   const GENERIC = "Incorrect email or password";
   if (!email || !password) return res.status(400).json({ error: GENERIC });
 
-  const user = await Staff.findOne({ email });
+  const user = await findAccountByEmail(email);
   if (!user) return res.status(401).json({ error: GENERIC });
 
   if (user.lockUntil && user.lockUntil > new Date()) {
@@ -100,7 +101,7 @@ router.get("/me", requireAuth, (req, res) => res.json(req.user));
 /* Public: tells the login screen whether to offer "set up the first admin
  * account" at all. True only for a completely empty install. */
 router.get("/bootstrap-status", async (_req, res) => {
-  const count = await Staff.countDocuments();
+  const count = await countAllAccounts();
   res.json({ needsSetup: count === 0 });
 });
 
@@ -109,7 +110,7 @@ router.get("/bootstrap-status", async (_req, res) => {
  * to hand out roles) and closes itself the instant one account exists —
  * every account after that comes from an existing admin's invite. */
 router.post("/signup", loginLimiter, async (req, res) => {
-  const count = await Staff.countDocuments();
+  const count = await countAllAccounts();
   if (count > 0) return res.status(403).json({ error: "Signup is closed. Ask an admin at your firm for an invite." });
 
   const name = String(req.body.name || "").trim();
@@ -123,8 +124,10 @@ router.post("/signup", loginLimiter, async (req, res) => {
 
   let user;
   try {
-    user = await Staff.create({
-      _id: "u" + Date.now().toString().slice(-8) + Math.floor(Math.random() * 100),
+    // Bootstrap always lands in the admins collection — there's no one else
+    // yet to hand this account any other role.
+    user = await Admin.create({
+      _id: "a" + Date.now().toString().slice(-8) + Math.floor(Math.random() * 100),
       name,
       email,
       role: "admin",
@@ -146,8 +149,8 @@ router.post("/forgot-password", forgotLimiter, async (req, res) => {
   const GENERIC = { ok: true, message: "If that email has an account, a reset link is on its way." };
   if (!email) return res.json(GENERIC);
 
-  const user = await Staff.findOne({ email, active: true });
-  if (user) {
+  const user = await findAccountByEmail(email);
+  if (user && user.active) {
     const { raw, hash } = generateResetToken();
     user.resetTokenHash = hash;
     user.resetTokenExpires = new Date(Date.now() + RESET_TOKEN_MINUTES * 60000);
@@ -175,7 +178,7 @@ router.post("/reset-password", async (req, res) => {
   const policyError = passwordPolicyError(password);
   if (policyError) return res.status(400).json({ error: policyError });
 
-  const user = await Staff.findOne({ email });
+  const user = await findAccountByEmail(email);
   if (!user || !user.resetTokenHash || !user.resetTokenExpires || user.resetTokenExpires < new Date()) {
     return res.status(400).json({ error: "This reset link is invalid or has expired." });
   }

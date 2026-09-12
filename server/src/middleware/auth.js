@@ -1,4 +1,4 @@
-import Staff from "../models/Staff.js";
+import { findAccountById } from "../accounts.js";
 import { verifySession } from "../utils/tokens.js";
 import { can } from "../constants/roles.js";
 
@@ -22,7 +22,7 @@ export async function requireAuth(req, res, next) {
       }
     }
 
-    const user = await Staff.findById(payload.sub);
+    const { account: user } = await findAccountById(payload.sub);
     if (!user || !user.active) return res.status(401).json({ error: "Account no longer active" });
 
     req.user = user;

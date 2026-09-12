@@ -2,6 +2,7 @@ import "dotenv/config";
 import { connectDB } from "./db.js";
 import mongoose from "mongoose";
 import Tenant from "./models/Tenant.js";
+import Admin from "./models/Admin.js";
 import Staff from "./models/Staff.js";
 import Project from "./models/Project.js";
 import Task from "./models/Task.js";
@@ -10,12 +11,14 @@ import Message from "./models/Message.js";
 import Outreach from "./models/Outreach.js";
 import { TENANTS, STAFF, PROJECTS, TASKS, LEADS, MESSAGES, OUTREACH, SEED_PASSWORD } from "./seedData.js";
 import { hashPassword } from "./utils/password.js";
+import { collectionFor } from "./accounts.js";
 
 async function run() {
   await connectDB();
 
   await Promise.all([
     Tenant.deleteMany({}),
+    Admin.deleteMany({}),
     Staff.deleteMany({}),
     Project.deleteMany({}),
     Task.deleteMany({}),
@@ -25,10 +28,13 @@ async function run() {
   ]);
 
   const passwordHash = await hashPassword(SEED_PASSWORD);
-  const staffWithPasswords = STAFF.map((s) => ({ ...s, passwordHash }));
+  const withPasswords = STAFF.map((s) => ({ ...s, passwordHash }));
+  const admins = withPasswords.filter((s) => collectionFor(s.role) === Admin);
+  const staffOnly = withPasswords.filter((s) => collectionFor(s.role) === Staff);
 
   await Tenant.insertMany(TENANTS);
-  await Staff.insertMany(staffWithPasswords);
+  await Admin.insertMany(admins);
+  await Staff.insertMany(staffOnly);
   await Project.insertMany(PROJECTS);
   await Task.insertMany(TASKS);
   await Lead.insertMany(LEADS);
@@ -37,7 +43,8 @@ async function run() {
 
   console.log("Seeded:", {
     tenants: TENANTS.length,
-    staff: STAFF.length,
+    admins: admins.length,
+    staff: staffOnly.length,
     projects: PROJECTS.length,
     tasks: TASKS.length,
     leads: LEADS.length,

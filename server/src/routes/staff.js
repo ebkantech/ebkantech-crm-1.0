@@ -1,12 +1,12 @@
 import { Router } from "express";
 import crypto from "crypto";
 import validator from "validator";
-import Staff from "../models/Staff.js";
 import { ROLES, can } from "../constants/roles.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { hashPassword } from "../utils/password.js";
 import { generateResetToken } from "../utils/tokens.js";
 import { sendWelcomeEmail } from "../mail.js";
+import { collectionFor, emailTaken, findAccountById, listAllAccounts } from "../accounts.js";
 
 const router = Router();
 const SETUP_TOKEN_MINUTES = 30;
@@ -14,13 +14,14 @@ const SETUP_TOKEN_MINUTES = 30;
 router.use(requireAuth);
 
 /* Everyone signed in can see the staff directory (names/roles show up all
- * over the app — task assignees, project teams, chat authors). Email
- * addresses are only exposed to whoever can actually manage accounts. */
+ * over the app — task assignees, project teams, chat authors), merged from
+ * both the admins and staff collections. Email addresses are only exposed
+ * to whoever can actually manage accounts. */
 router.get("/", async (req, res) => {
-  const staff = await Staff.find().sort({ _id: 1 });
+  const accounts = await listAllAccounts();
   const seeEmails = can(req.user, "team.manage");
   res.json(
-    staff.map((s) => {
+    accounts.map((s) => {
       const json = s.toJSON();
       if (!seeEmails && s.id !== req.user.id) delete json.email;
       return json;
@@ -37,16 +38,17 @@ router.post("/", requirePermission("team.manage"), async (req, res) => {
   if (!validator.isEmail(email)) return res.status(400).json({ error: "A valid email is required" });
   if (!ROLES[role]) return res.status(400).json({ error: "Unknown role" });
 
-  const existing = await Staff.findOne({ email });
-  if (existing) return res.status(409).json({ error: "Someone already has an account with that email" });
+  if (await emailTaken(email)) return res.status(409).json({ error: "Someone already has an account with that email" });
 
   // Placeholder password nobody knows or can derive — the account only
   // becomes usable once the invite link below is used to set a real one.
   const placeholder = await hashPassword(crypto.randomBytes(32).toString("hex"));
   const { raw, hash } = generateResetToken();
 
-  const staff = await Staff.create({
-    _id: "u" + Date.now().toString().slice(-8) + Math.floor(Math.random() * 100),
+  const Model = collectionFor(role);
+  const prefix = Model.modelName === "Admin" ? "a" : "u";
+  const staff = await Model.create({
+    _id: prefix + Date.now().toString().slice(-8) + Math.floor(Math.random() * 100),
     name,
     email,
     role,
@@ -68,21 +70,39 @@ router.post("/", requirePermission("team.manage"), async (req, res) => {
 });
 
 router.patch("/:id", requirePermission("team.manage"), async (req, res) => {
+  const { account, Model: CurrentModel } = await findAccountById(req.params.id);
+  if (!account) return res.status(404).json({ error: "Not found" });
+
   const updates = {};
   if (req.body.name !== undefined) updates.name = String(req.body.name).trim();
+  if (req.body.active !== undefined) updates.active = !!req.body.active;
+
+  let nextRole = account.role;
   if (req.body.role !== undefined) {
     if (!ROLES[req.body.role]) return res.status(400).json({ error: "Unknown role" });
-    updates.role = req.body.role;
+    nextRole = req.body.role;
+    updates.role = nextRole;
   }
-  if (req.body.active !== undefined) updates.active = !!req.body.active;
 
   if (req.params.id === req.user.id && updates.active === false) {
     return res.status(400).json({ error: "You can't deactivate your own account" });
   }
 
-  const staff = await Staff.findByIdAndUpdate(req.params.id, updates, { new: true });
-  if (!staff) return res.status(404).json({ error: "Not found" });
-  res.json(staff);
+  const TargetModel = collectionFor(nextRole);
+
+  if (TargetModel !== CurrentModel) {
+    // Promotion/demotion across the admin/staff line — the document has to
+    // physically move to the other collection, same id and everything else.
+    const plain = account.toObject();
+    Object.assign(plain, updates);
+    await CurrentModel.deleteOne({ _id: account.id });
+    const moved = await TargetModel.create(plain);
+    return res.json(moved);
+  }
+
+  Object.assign(account, updates);
+  await account.save();
+  res.json(account);
 });
 
 export default router;
